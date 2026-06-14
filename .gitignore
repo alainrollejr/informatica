@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+*.DS_Store
+
+# Generated artefacts (regenerate with python generate_pdf.py)
+graphs.pdf
+graphs_preview.html
