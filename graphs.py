@@ -1,106 +1,24 @@
 """
-graphs.py — Five graph types + classic algorithms.
+graphs.py — Educational graph class hierarchy.
 No external imports; only plain Python built-ins.
 
-========================================================================
-WHAT IS A GRAPH?
-A graph is a collection of NODES (things) connected by EDGES (links).
-  city map  → nodes = cities,   edges = roads
-  internet  → nodes = websites, edges = hyperlinks
-  schedule  → nodes = tasks,    edges = "must-do-first" arrows
+Pass  debug=True  to any constructor to get step-by-step explanations
+of what the internal data structures look like and how each algorithm
+makes its decisions.  Great for learning; turn it off once you understand.
 
-========================================================================
-THE FIVE TYPES (from most general to most specific)
-========================================================================
+Class hierarchy
+---------------
+  Graph                  undirected, may have cycles
+  AcyclicGraph(Graph)    undirected, no cycles  (= forest)
+  DirectedGraph          directed,   may have cycles
+  DAG(DirectedGraph)     directed,   no cycles
+  Tree(DAG)              rooted directed tree
 
- GRAPH  —  undirected, may have cycles
- ─────────────────────────────────────────────────────────────────────
-   Edges have no direction: A-B is the same as B-A.
-   Can loop back: A-B-C-A is allowed.
-   Think: roads, friendships, power grids.
-
-   nodes()                    list of all node names
-   edges()                    list of all connections as (A,B) pairs
-   neighbors(node)            who is directly connected to node?
-   degree(node)               how many edges does node have?
-   has_path(src,dst)          can you reach dst starting from src?
-   is_connected()             can every node reach every other node?
-   connected_components()     which groups of nodes form separate islands?
-   all_paths(src,dst)         every possible route from src to dst
-   minimum_dominating_sets()  smallest set S so every node outside S
-                              is exactly one step from a member of S
-
-
- ACYCLICGRAPH  —  undirected, no cycles  (inherits all Graph methods)
- ─────────────────────────────────────────────────────────────────────
-   Like Graph but guaranteed to contain no loops.
-   A connected AcyclicGraph IS a tree; disconnected = a forest.
-   Raises an error if you try to add a cycle.
-
-
- DIRECTEDGRAPH  —  directed, may have cycles
- ─────────────────────────────────────────────────────────────────────
-   Edges have a direction: A→B does NOT mean B→A.
-   Can loop back: A→B→C→A is allowed.
-   Think: one-way streets, Twitter follows, web links.
-
-   nodes(), edges()           same idea as Graph
-   children(node)             nodes this node points TO
-   parents(node)              nodes that point TO this node
-   in_degree(node)            how many arrows arrive at node?
-   out_degree(node)           how many arrows leave node?
-   has_path(src,dst)          can you reach dst following arrows?
-   has_cycle()                does any directed loop exist?
-   transpose()                return a new graph with every arrow flipped
-   strongly_connected_components()
-                              groups of nodes where every node can reach
-                              every other (Kosaraju, two DFS passes)
-
-
- DAG  —  directed, no cycles  (inherits all DirectedGraph methods)
- ─────────────────────────────────────────────────────────────────────
-   Directed AND guaranteed to have no directed cycles.
-   Raises an error if you try to add a cycle.
-   Think: dependency graphs, build systems, DP subproblems, schedules.
-
-   roots()                    nodes with no incoming arrows (entry points)
-   leaves()                   nodes with no outgoing arrows (dead ends)
-   topological_sort()         order nodes so each one comes after everything
-                              it depends on  (Kahn's algorithm, BFS)
-   descendants(node)          all nodes reachable from node following arrows
-   ancestors(node)            all nodes that can reach node
-   all_paths(src,dst)         every directed route from src to dst
-   shortest_path(src,dst)     fewest-step route  (BFS)
-   longest_path(src,dst)      most-step route    (DP — easy on a DAG!)
-
-
- TREE  —  rooted directed tree  (inherits all DAG methods)
- ─────────────────────────────────────────────────────────────────────
-   A rooted DAG where every non-root node has EXACTLY ONE parent.
-   Raises an error if any non-root node has more or fewer than one parent.
-   Think: file systems, XML, JSON, recursive call stacks.
-
-   parent(node)               the one node directly above this one
-   depth(node)                how many steps down from the root?
-   height()                   how deep is the deepest leaf?
-   is_leaf(node)              does this node have no children?
-   nodes_at_depth(d)          all nodes exactly d steps from the root
-   subtree(node)              cut out the piece of tree below node
-   siblings(node)             other children of the same parent
-   lca(a,b)                   Lowest Common Ancestor — deepest node that
-                              is an ancestor of BOTH a and b
-   pre_order()                visit order: parent BEFORE children
-   post_order()               visit order: children BEFORE parent
-
-========================================================================
-STANDALONE ALGORITHMS
-========================================================================
-   format_solutions(solutions,sep)  readable output for solution lists
-   tsp(graph,distances,start)       Traveling Salesman: shortest round trip
-                                    visiting all cities  (backtracking)
-   build_hanoi_tree(n)              call tree for Tower of Hanoi(n)
-
-========================================================================
+Standalone algorithms
+---------------------
+  format_solutions(solutions, sep)   pretty-print solution lists
+  tsp(graph, distances, start)       Traveling Salesman — backtracking
+  build_hanoi_tree(n)                Tower of Hanoi recursive call tree
 """
 
 
@@ -110,12 +28,23 @@ STANDALONE ALGORITHMS
 
 def format_solutions(solutions, sep=":"):
     """
-    Convert a list of solutions into readable strings.
+    Convert a list of solution-tuples into a list of joined strings.
 
-    Each solution is a tuple/list of node names joined by `sep`.
+    Parameters
+    ----------
+    solutions : list of tuple or list   each element is one solution
+    sep       : str                     separator between node names
 
-    >>> format_solutions([("A","B","C"), ("A","C")], sep=",")
-    ['A,B,C', 'A,C']
+    Returns
+    -------
+    list of str
+
+    Example
+    -------
+    >>> format_solutions([('A','B','C'), ('A','C')], sep=':')
+    ['A:B:C', 'A:C']
+    >>> format_solutions([('K','Q','U')], sep=', ')
+    ['K, Q, U']
     """
     return [sep.join(str(n) for n in sol) for sol in solutions]
 
@@ -127,17 +56,40 @@ def format_solutions(solutions, sep=":"):
 class Graph:
     """
     Undirected graph.  Edges have no direction; A-B and B-A are the same.
-    May contain cycles (A-B-C-A is allowed).
+    May contain cycles.
 
-    _adj : dict[str, list[str]]   symmetric adjacency list
+    Internal storage
+    ----------------
+    _adj : dict[str, list[str]]   symmetric adjacency list.
+
+    debug parameter
+    ---------------
+    Pass debug=True to print step-by-step explanations of internal data
+    structures and algorithm decisions.  Useful for learning.
+
+    Example
+    -------
+    >>> g = Graph(edges=[('A','B'), ('B','C'), ('A','C')])
+    >>> g = Graph(nodes=['X','Y','Z'], edges=[('X','Y')])  # Z is isolated
+    >>> g = Graph(debug=True)                              # empty, with debug on
     """
 
-    def __init__(self, edges=None, nodes=None):
+    def __init__(self, edges=None, nodes=None, debug=False):
         """
-        edges : list of (a, b) tuples  — unordered pairs
-        nodes : optional list of str   — to include isolated nodes
+        Parameters
+        ----------
+        edges : list of (str, str) tuples   unordered pairs, e.g. [('A','B'), ('B','C')]
+        nodes : list of str (optional)      explicit node names including isolated nodes
+        debug : bool (default False)        print educational step-by-step output
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('A','C'), ('B','D')])
+        >>> g = Graph(nodes=['P','Q','R'], edges=[('P','Q')])  # R has no edges
         """
-        self._adj = {}
+        self._debug = debug
+        self._adj   = {}
+
         if nodes:
             for n in nodes:
                 self._ensure(n)
@@ -150,18 +102,52 @@ class Graph:
                 if a not in self._adj[b]:
                     self._adj[b].append(a)
 
+        if self._debug:
+            print(f"\n{'='*60}")
+            print(f"[{self.__class__.__name__}.__init__] Internal data structure")
+            print(f"{'='*60}")
+            print("  _adj  =  adjacency list")
+            print("  Maps every node to the list of its direct neighbours.")
+            print("  Because the graph is UNDIRECTED, every edge A-B is stored")
+            print("  in BOTH directions: adj[A] contains B  AND  adj[B] contains A.")
+            print()
+            if self._adj:
+                for node in sorted(self._adj):
+                    nbrs = sorted(self._adj[node])
+                    print(f"  _adj[{node!r}] = {nbrs}")
+            else:
+                print("  (no nodes yet)")
+            print()
+
     def _ensure(self, n):
+        """(private) register node n if it does not yet exist."""
         if n not in self._adj:
             self._adj[n] = []
 
     # ── simple accessors ──────────────────────────────────────────────
 
     def nodes(self):
-        """Sorted list of all node names."""
+        """
+        Sorted list of all node names (strings).
+
+        Example
+        -------
+        >>> g = Graph(edges=[('B','A'), ('C','A')])
+        >>> g.nodes()
+        ['A', 'B', 'C']
+        """
         return sorted(self._adj)
 
     def edges(self):
-        """List of edges as sorted (a, b) tuples — each pair appears once."""
+        """
+        List of edges as sorted (a, b) tuples — each undirected pair appears once.
+
+        Example
+        -------
+        >>> g = Graph(edges=[('B','A'), ('C','B')])
+        >>> g.edges()
+        [('A', 'B'), ('B', 'C')]
+        """
         seen, result = set(), []
         for a in sorted(self._adj):
             for b in self._adj[a]:
@@ -172,11 +158,39 @@ class Graph:
         return result
 
     def neighbors(self, node):
-        """All nodes directly connected to node."""
+        """
+        List of nodes directly connected to node (unsorted).
+
+        Parameters
+        ----------
+        node : str   a node name that exists in the graph
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('A','C'), ('B','D')])
+        >>> g.neighbors('A')
+        ['B', 'C']
+        >>> g.neighbors('D')
+        ['B']
+        """
         return list(self._adj.get(node, []))
 
     def degree(self, node):
-        """Number of edges incident to node."""
+        """
+        Number of edges incident to node (= number of neighbours).
+
+        Parameters
+        ----------
+        node : str
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('A','C'), ('A','D')])
+        >>> g.degree('A')
+        3
+        >>> g.degree('B')
+        1
+        """
         return len(self._adj.get(node, []))
 
     def __str__(self):
@@ -190,50 +204,124 @@ class Graph:
     def has_path(self, src, dst):
         """
         ITERATIVE — BFS.
-        True if any path from src to dst exists (following edges freely).
-        Short-circuits as soon as dst is found.
+        Return True if any path from src to dst exists (edges in any direction).
+
+        Parameters
+        ----------
+        src : str   starting node
+        dst : str   destination node
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('B','C'), ('D','E')])
+        >>> g.has_path('A', 'C')
+        True
+        >>> g.has_path('A', 'D')   # different component
+        False
+        >>> g.has_path('A', 'A')   # same node -> always True
+        True
         """
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.has_path]  '{src}' -> '{dst}'?")
+            print("  Strategy: BFS — spread outward one hop at a time.")
+            print("  First time we reach dst, we know a path exists.")
+            print(f"  Start: queue=['{src}']  visited={{'{src}'}}")
+
         if src == dst:
+            if self._debug:
+                print("  src == dst -> True (trivially)")
             return True
+
         visited = {src}
         queue   = [src]
+        step    = 0
+
         while queue:
             node = queue.pop(0)
+            step += 1
+            if self._debug:
+                nbrs = sorted(self._adj.get(node, []))
+                print(f"  Step {step}: process '{node}' -> neighbors {nbrs}")
             for v in self._adj.get(node, []):
                 if v == dst:
+                    if self._debug:
+                        print(f"    '{v}' == dst -> path FOUND  (True)")
                     return True
                 if v not in visited:
                     visited.add(v)
                     queue.append(v)
+                    if self._debug:
+                        print(f"    enqueue '{v}'  visited={sorted(visited)}")
+
+        if self._debug:
+            print(f"  Queue empty, '{dst}' never reached -> False")
         return False
 
     def is_connected(self):
         """
         RECURSIVE — DFS.
-        True when all nodes can be reached from a single starting node
-        (i.e. the graph is one single component, no isolated islands).
+        Return True when all nodes can be reached from a single starting node
+        (the whole graph is one piece with no isolated islands).
+
+        Example
+        -------
+        >>> Graph(edges=[('A','B'), ('B','C')]).is_connected()
+        True
+        >>> Graph(edges=[('A','B'), ('C','D')]).is_connected()   # two islands
+        False
         """
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.is_connected]")
+            print("  Strategy: DFS from any one node.")
+            print("  If all nodes are visited -> the graph is one piece (connected).")
+
         if not self._adj:
             return True
+
+        start   = next(iter(self._adj))
         visited = set()
 
         def dfs(u):
             visited.add(u)
+            if self._debug:
+                print(f"    visit '{u}'")
             for v in self._adj[u]:
                 if v not in visited:
                     dfs(v)
 
-        dfs(next(iter(self._adj)))
-        return len(visited) == len(self._adj)
+        if self._debug:
+            print(f"  Start DFS from '{start}':")
+        dfs(start)
+
+        result = len(visited) == len(self._adj)
+        if self._debug:
+            missed = sorted(set(self._adj) - visited)
+            if result:
+                print(f"  All {len(visited)} nodes reached -> connected: True")
+            else:
+                print(f"  Only {len(visited)}/{len(self._adj)} nodes reached.")
+                print(f"  Unreachable: {missed} -> connected: False")
+        return result
 
     def connected_components(self):
         """
-        RECURSIVE — DFS over all unvisited starting nodes.
-        Returns a list of components; each component is a sorted list
-        of node names that can reach each other.
+        RECURSIVE — DFS over all unvisited nodes.
+        Return a list of components; each component is a sorted list of node names
+        that can all reach each other.
 
-        A graph is connected when this returns a list with exactly one element.
+        A graph is connected when this returns a list containing exactly one element.
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('C','D'), ('D','E')])
+        >>> g.connected_components()
+        [['A', 'B'], ['C', 'D', 'E']]
         """
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.connected_components]")
+            print("  Strategy: repeat DFS from each unvisited node.")
+            print("  Each DFS discovers one complete island (component).")
+
         visited    = set()
         components = []
 
@@ -249,17 +337,35 @@ class Graph:
                 comp = []
                 dfs(start, comp)
                 components.append(sorted(comp))
+                if self._debug:
+                    print(f"  Component #{len(components)}: {sorted(comp)}")
 
+        if self._debug:
+            print(f"  Total: {len(components)} component(s)")
         return components
 
     def all_paths(self, src, dst):
         """
         RECURSIVE — DFS with backtracking.
-        Returns every route from src to dst that visits each node at most once.
-        Warning: can be exponentially many paths on dense graphs.
+        Return every simple route from src to dst as a list of node lists.
+        Each node is visited at most once per path.
+        Works even when the graph has cycles (path-set prevents revisiting).
+        Warning: exponentially many paths on dense graphs.
 
-        Works even when the graph has cycles — the on_path set prevents
-        revisiting nodes already in the current path.
+        Parameters
+        ----------
+        src : str   starting node
+        dst : str   destination node
+
+        Returns
+        -------
+        list of list[str]   e.g.  [['A','B','D'], ['A','C','D']]
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D')])
+        >>> g.all_paths('A', 'D')
+        [['A', 'B', 'D'], ['A', 'C', 'D']]
         """
         result = []
 
@@ -276,22 +382,37 @@ class Graph:
                     on_path.remove(v)   # backtrack
 
         dfs(src, [src], {src})
+
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.all_paths]  '{src}' -> '{dst}'")
+            print(f"  Found {len(result)} path(s) (DFS + backtracking):")
+            for p in result:
+                print(f"    {' -> '.join(p)}")
+
         return result
 
     def minimum_dominating_sets(self):
         """
         RECURSIVE — backtracking with size pruning + feasibility pruning.
+        NP-complete in general; practical for graphs up to ~20-25 nodes.
 
         Find all minimum dominating sets S:
-          every node NOT in S must be adjacent to (= one hop from) some node in S.
+          every node NOT in S must be adjacent to at least one node IN S.
 
-        This is the undirected Minimum Set Cover — NP-complete in general.
+        Undirected coverage: coverage(u) = {u} ∪ neighbours(u)
 
-        Pruning 1 — size:        if |chosen| >= best, abandon branch.
-        Pruning 2 — feasibility: if some uncovered node has no remaining
-                                  candidate that can cover it, abandon.
+        Returns
+        -------
+        list of list[str]   all optimal solutions, each sorted alphabetically.
+                            e.g.  [['A', 'C'], ['B']]
 
-        Returns a list of optimal solutions (each a sorted list of nodes).
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('B','C')])
+        >>> g.minimum_dominating_sets()   # B alone covers everything
+        [['B']]
+        >>> Graph(edges=[('A','B'),('C','D')]).minimum_dominating_sets()
+        [['A', 'C'], ['A', 'D'], ['B', 'C'], ['B', 'D']]
         """
         nodes     = self.nodes()
         n         = len(nodes)
@@ -304,7 +425,27 @@ class Graph:
             for v in coverage[u]:
                 coverers_of[v].add(node_idx[u])
 
-        best_size, results = [n], []
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.minimum_dominating_sets]")
+            print("  coverage(u) = {u} + neighbours(u)")
+            print("  When u joins S it 'covers' itself and all its neighbours.")
+            print()
+            print(f"  {'Node':<8}  Coverage set")
+            for u in nodes:
+                print(f"  {u:<8}  {sorted(coverage[u])}")
+            print()
+            print("  Backtracking: for each node (sorted), two branches:")
+            print("    Branch A: INCLUDE in S  (expands covered set)")
+            print("    Branch B: SKIP")
+            print("  Two pruning rules cut dead branches:")
+            print("    Pruning 1: |chosen| >= best size found   -> abandon")
+            print("    Pruning 2: some uncovered node has no remaining candidate -> abandon")
+            print()
+
+        best_size   = [n]
+        results     = []
+        prune1_hits = [0]
+        prune2_hits = [0]
 
         def backtrack(idx, chosen, covered):
             if covered == all_nodes:
@@ -313,23 +454,35 @@ class Graph:
                     best_size[0] = size
                     results.clear()
                     results.append(tuple(chosen))
+                    if self._debug:
+                        print(f"  *** New best: {sorted(chosen)} (size {size})")
                 elif size == best_size[0]:
                     results.append(tuple(chosen))
+                    if self._debug:
+                        print(f"  *** Tied best: {sorted(chosen)} (size {size})")
                 return
-            if len(chosen) >= best_size[0]:                # pruning 1
+            if len(chosen) >= best_size[0]:
+                prune1_hits[0] += 1
                 return
-            for v in all_nodes - covered:                  # pruning 2
+            for v in all_nodes - covered:
                 if not any(i >= idx for i in coverers_of[v]):
+                    prune2_hits[0] += 1
                     return
             if idx >= n:
                 return
             node = nodes[idx]
-            chosen.append(node)                            # branch A: include
+            chosen.append(node)
             backtrack(idx + 1, chosen, covered | coverage[node])
             chosen.pop()
-            backtrack(idx + 1, chosen, covered)            # branch B: skip
+            backtrack(idx + 1, chosen, covered)
 
         backtrack(0, [], set())
+
+        if self._debug:
+            print(f"  Pruning 1 fired {prune1_hits[0]}x  (size bound)")
+            print(f"  Pruning 2 fired {prune2_hits[0]}x  (feasibility)")
+            print(f"  Optimal size: {best_size[0]},  {len(results)} solution(s)")
+
         return [sorted(r) for r in results]
 
 
@@ -339,15 +492,30 @@ class Graph:
 
 class AcyclicGraph(Graph):
     """
-    Undirected graph guaranteed to contain no cycles.
-    A connected AcyclicGraph is a tree; disconnected is a forest.
+    Undirected graph guaranteed to contain no cycles (a forest).
+    A connected AcyclicGraph IS a tree; disconnected = a forest.
     Raises ValueError on construction if a cycle is detected.
-
     Inherits all Graph methods.
+
+    Example
+    -------
+    >>> g = AcyclicGraph(edges=[('A','B'), ('B','C'), ('A','D')])  # valid tree
+    >>> AcyclicGraph(edges=[('A','B'), ('B','C'), ('C','A')])      # raises ValueError
     """
 
-    def __init__(self, edges=None, nodes=None):
-        super().__init__(edges=edges, nodes=nodes)
+    def __init__(self, edges=None, nodes=None, debug=False):
+        """
+        Parameters
+        ----------
+        edges : list of (str, str) tuples   undirected edge pairs
+        nodes : list of str (optional)
+        debug : bool (default False)
+
+        Example
+        -------
+        >>> g = AcyclicGraph(edges=[('root','A'), ('root','B'), ('A','C')])
+        """
+        super().__init__(edges=edges, nodes=nodes, debug=debug)
         if self._has_cycle():
             raise ValueError("Edges form a cycle — not a valid AcyclicGraph.")
 
@@ -355,20 +523,30 @@ class AcyclicGraph(Graph):
         """
         RECURSIVE — DFS tracking the parent edge.
 
-        In an undirected graph a cycle exists when DFS reaches an already-
-        visited node that is NOT the immediate parent (a back-edge).
+        In an undirected graph: reaching a visited node that is NOT the
+        immediate parent we came from = back-edge = cycle.
         Returns True when a cycle is found.
         """
+        if self._debug:
+            print(f"\n[AcyclicGraph._has_cycle]  Checking for cycles")
+            print("  A cycle exists when DFS reaches an already-visited node")
+            print("  that is NOT the edge we just came from.")
+
         visited = set()
 
-        def dfs(u, parent):
+        def dfs(u, parent, depth=0):
             visited.add(u)
+            indent = "  " * (depth + 1)
+            if self._debug:
+                print(f"{indent}visit '{u}' (came from '{parent}')")
             for v in self._adj[u]:
                 if v == parent:
-                    continue            # the edge we arrived on — not a cycle
+                    continue
                 if v in visited:
-                    return True         # back-edge → cycle detected
-                if dfs(v, u):
+                    if self._debug:
+                        print(f"{indent}  '{v}' already visited and not parent -> CYCLE!")
+                    return True
+                if dfs(v, u, depth + 1):
                     return True
             return False
 
@@ -376,6 +554,9 @@ class AcyclicGraph(Graph):
             if start not in visited:
                 if dfs(start, None):
                     return True
+
+        if self._debug:
+            print("  No cycle found -> valid AcyclicGraph")
         return False
 
 
@@ -385,20 +566,42 @@ class AcyclicGraph(Graph):
 
 class DirectedGraph:
     """
-    Directed graph.  Edge A→B does NOT mean B→A.
-    May contain directed cycles (A→B→C→A is allowed).
+    Directed graph.  Edge A->B does NOT mean B->A.
+    May contain directed cycles (A->B->C->A is allowed).
 
+    Internal storage
+    ----------------
     _forward_adj : dict[str, list[str]]   node -> list of children
     _reverse_adj : dict[str, list[str]]   node -> list of parents
+
+    debug parameter
+    ---------------
+    Pass debug=True to print internal data structures and algorithm steps.
+
+    Example
+    -------
+    >>> g = DirectedGraph(edges=[('A','B'), ('A','C'), ('B','D')])
+    >>> g = DirectedGraph(nodes=['X','Y'], edges=[('X','Y')])
     """
 
-    def __init__(self, edges=None, nodes=None):
+    def __init__(self, edges=None, nodes=None, debug=False):
         """
-        edges : list of (src, dst) tuples
-        nodes : optional list of str (to include isolated nodes)
+        Parameters
+        ----------
+        edges : list of (str, str) tuples   directed pairs (src, dst)
+                                            e.g. [('A','B'), ('B','C')]
+        nodes : list of str (optional)      to include isolated nodes
+        debug : bool (default False)
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'), ('B','C'), ('C','A')])  # cycle ok
+        >>> g = DirectedGraph(debug=True)                               # with debug
         """
-        self._forward_adj = {}
-        self._reverse_adj = {}
+        self._debug        = debug
+        self._forward_adj  = {}
+        self._reverse_adj  = {}
+
         if nodes:
             for n in nodes:
                 self._ensure(n)
@@ -406,12 +609,33 @@ class DirectedGraph:
             for src, dst in edges:
                 self._link(src, dst)
 
+        if self._debug:
+            print(f"\n{'='*60}")
+            print(f"[{self.__class__.__name__}.__init__] Internal data structures")
+            print(f"{'='*60}")
+            print("  _forward_adj  maps each node to its CHILDREN")
+            print("                (nodes this node has an arrow pointing TO)")
+            print("  _reverse_adj  maps each node to its PARENTS")
+            print("                (nodes that have an arrow pointing TO this node)")
+            print("  Both dicts are kept in sync so parent lookups stay cheap.")
+            print()
+            hdr = f"  {'Node':<10}  {'children (_forward_adj)':<30}  parents (_reverse_adj)"
+            print(hdr)
+            print("  " + "-" * (len(hdr) - 2))
+            for node in sorted(self._forward_adj):
+                ch = sorted(self._forward_adj[node])
+                pa = sorted(self._reverse_adj[node])
+                print(f"  {node:<10}  {str(ch):<30}  {pa}")
+            print()
+
     def _ensure(self, n):
+        """(private) register node n if it does not yet exist."""
         if n not in self._forward_adj:
             self._forward_adj[n] = []
             self._reverse_adj[n] = []
 
     def _link(self, src, dst):
+        """(private) add directed edge src->dst; keeps both adjacency dicts in sync."""
         self._ensure(src)
         self._ensure(dst)
         if dst not in self._forward_adj[src]:
@@ -422,27 +646,94 @@ class DirectedGraph:
     # ── simple accessors ──────────────────────────────────────────────
 
     def nodes(self):
+        """
+        Sorted list of all node names.
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('B','A'), ('C','A')])
+        >>> g.nodes()
+        ['A', 'B', 'C']
+        """
         return sorted(self._forward_adj)
 
     def edges(self):
+        """
+        List of directed edges as (src, dst) tuples (sorted).
+        Order: A->B, A->C, B->...
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('B','C'), ('A','B')])
+        >>> g.edges()
+        [('A', 'B'), ('B', 'C')]
+        """
         return [(s, d)
                 for s in sorted(self._forward_adj)
                 for d in self._forward_adj[s]]
 
     def children(self, node):
-        """Direct successors — nodes this node points TO."""
+        """
+        Nodes that node points TO (direct successors).
+
+        Parameters
+        ----------
+        node : str
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'), ('A','C'), ('B','D')])
+        >>> g.children('A')
+        ['B', 'C']
+        >>> g.children('D')   # leaf node
+        []
+        """
         return list(self._forward_adj.get(node, []))
 
     def parents(self, node):
-        """Direct predecessors — nodes that point TO this node."""
+        """
+        Nodes that point TO node (direct predecessors).
+
+        Parameters
+        ----------
+        node : str
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','C'), ('B','C')])
+        >>> g.parents('C')
+        ['A', 'B']
+        >>> g.parents('A')   # root node
+        []
+        """
         return list(self._reverse_adj.get(node, []))
 
     def in_degree(self, node):
-        """Number of incoming arrows (= number of parents)."""
+        """
+        Number of incoming arrows (= number of parents).
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','C'), ('B','C')])
+        >>> g.in_degree('C')    # two arrows arrive
+        2
+        >>> g.in_degree('A')    # nothing points to A
+        0
+        """
         return len(self._reverse_adj.get(node, []))
 
     def out_degree(self, node):
-        """Number of outgoing arrows (= number of children)."""
+        """
+        Number of outgoing arrows (= number of children).
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'), ('A','C')])
+        >>> g.out_degree('A')   # A points to B and C
+        2
+        >>> g.out_degree('B')
+        0
+        """
         return len(self._forward_adj.get(node, []))
 
     def __str__(self):
@@ -459,8 +750,15 @@ class DirectedGraph:
     def has_path(self, src, dst):
         """
         RECURSIVE — simple DFS.
-        True if a directed path src→…→dst exists (following arrow directions).
-        Short-circuits as soon as dst is found.
+        True if a directed path src->...->dst exists (following arrow directions).
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'), ('B','C')])
+        >>> g.has_path('A', 'C')   # A->B->C exists
+        True
+        >>> g.has_path('C', 'A')   # no arrows go backwards
+        False
         """
         if src == dst:
             return True
@@ -473,58 +771,130 @@ class DirectedGraph:
             return any(dfs(v) for v in self._forward_adj.get(u, [])
                        if v not in visited)
 
-        return dfs(src)
+        result = dfs(src)
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.has_path]  '{src}' -> '{dst}': {result}")
+        return result
 
     def has_cycle(self):
         """
         RECURSIVE — three-colour DFS.
+        Return True if any directed cycle exists in the graph.
 
-        WHITE=0 not visited | GRAY=1 on recursion stack | BLACK=2 done.
-        Reaching a GRAY node is a back-edge → directed cycle exists.
-        Returns True when a directed cycle is found.
+        WHITE = not yet visited
+        GRAY  = currently on the recursion stack
+        BLACK = fully explored, no cycle found below
+
+        Example
+        -------
+        >>> DirectedGraph(edges=[('A','B'), ('B','C'), ('C','A')]).has_cycle()
+        True
+        >>> DirectedGraph(edges=[('A','B'), ('B','C')]).has_cycle()
+        False
         """
         WHITE, GRAY, BLACK = 0, 1, 2
         color = {n: WHITE for n in self._forward_adj}
 
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.has_cycle]  Three-colour DFS")
+            print("  WHITE  = not yet visited")
+            print("  GRAY   = currently being explored (on the recursion stack RIGHT NOW)")
+            print("  BLACK  = fully explored (no cycles found below this node)")
+            print("  KEY: reaching a GRAY node = we looped back = DIRECTED CYCLE!")
+            print()
+
+        depth_ctr = [0]
+
         def dfs(u):
+            indent = "  " * (depth_ctr[0] + 1)
             color[u] = GRAY
+            if self._debug:
+                print(f"{indent}'{u}': WHITE -> GRAY  (start exploring)")
+            depth_ctr[0] += 1
             for v in self._forward_adj[u]:
                 if color[v] == GRAY:
-                    return True         # back-edge → cycle
-                if color[v] == WHITE and dfs(v):
+                    if self._debug:
+                        print(f"{'  ' * depth_ctr[0]}  -> '{v}' is GRAY! "
+                              f"Back-edge -> CYCLE DETECTED")
+                    depth_ctr[0] -= 1
                     return True
+                if color[v] == WHITE:
+                    if self._debug:
+                        print(f"{'  ' * depth_ctr[0]}  -> follow to '{v}' (WHITE)")
+                    if dfs(v):
+                        depth_ctr[0] -= 1
+                        return True
+                else:
+                    if self._debug:
+                        print(f"{'  ' * depth_ctr[0]}  -> '{v}' is BLACK (safe, skip)")
             color[u] = BLACK
+            depth_ctr[0] -= 1
+            if self._debug:
+                print(f"{indent}'{u}': GRAY -> BLACK  (no cycle here)")
             return False
 
-        return any(dfs(n) for n in list(self._forward_adj) if color[n] == WHITE)
+        for node in list(self._forward_adj):
+            if color[node] == WHITE:
+                if self._debug:
+                    print(f"  Start DFS from '{node}' (unvisited)")
+                if dfs(node):
+                    return True
+
+        if self._debug:
+            print("  All nodes explored -> no cycle found")
+        return False
 
     def transpose(self):
         """
         Return a new DirectedGraph with every arrow reversed.
-        If original has A→B, the transpose has B→A.
-        Useful as a building block for strongly_connected_components().
+        If original has A->B, the transpose has B->A.
+
+        Returns
+        -------
+        DirectedGraph   a new graph; the original is not modified.
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'), ('B','C')])
+        >>> g.transpose().edges()
+        [('B', 'A'), ('C', 'B')]
         """
         return DirectedGraph(
             edges=[(d, s) for s, d in self.edges()],
-            nodes=self.nodes()
+            nodes=self.nodes(),
+            debug=self._debug
         )
 
     def strongly_connected_components(self):
         """
         RECURSIVE — Kosaraju's algorithm (two DFS passes), O(V + E).
 
-        A Strongly Connected Component (SCC) is a maximal set of nodes
-        where every node can reach every other node following arrows.
+        A Strongly Connected Component (SCC) is a maximal set of nodes where
+        EVERY node can reach EVERY other node by following arrows.
+        In a DAG, every SCC contains exactly one node.
 
-        Pass 1: DFS on the original graph — record finish order.
-        Pass 2: DFS on the transposed graph in REVERSE finish order.
-                Each DFS tree in pass 2 is one SCC.
+        Returns
+        -------
+        list of list[str]   each inner list is one SCC, sorted alphabetically.
 
-        Returns a list of sorted node lists (one per SCC).
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'),('B','C'),('C','A'),('B','D')])
+        >>> g.strongly_connected_components()
+        [['A', 'B', 'C'], ['D']]
+        >>> DAG(edges=[('A','B'),('B','C')]).strongly_connected_components()
+        [['A'], ['B'], ['C']]    # each node is its own SCC in a DAG
         """
-        # ── Pass 1: record finish order ───────────────────────────────
-        visited  = set()
-        finish   = []          # nodes in order of DFS completion
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.strongly_connected_components]")
+            print("  Kosaraju's algorithm — two DFS passes:")
+            print("  Pass 1: explore original graph, record the order nodes FINISH.")
+            print("  Pass 2: explore TRANSPOSED graph in REVERSE finish order.")
+            print("          Each DFS tree in pass 2 = one SCC.")
+            print()
+
+        visited = set()
+        finish  = []
 
         def dfs1(u):
             visited.add(u)
@@ -537,7 +907,10 @@ class DirectedGraph:
             if n not in visited:
                 dfs1(n)
 
-        # ── Pass 2: DFS on transposed graph in reverse finish order ───
+        if self._debug:
+            print(f"  Pass 1 finish order: {finish}")
+            print()
+
         T       = self.transpose()
         visited = set()
         sccs    = []
@@ -554,6 +927,8 @@ class DirectedGraph:
                 comp = []
                 dfs2(node, comp)
                 sccs.append(sorted(comp))
+                if self._debug:
+                    print(f"  SCC #{len(sccs)}: {sorted(comp)}")
 
         return sccs
 
@@ -565,25 +940,73 @@ class DirectedGraph:
 class DAG(DirectedGraph):
     """
     Directed Acyclic Graph.
-    Extends DirectedGraph by guaranteeing no directed cycles.
+    Extends DirectedGraph: guarantees no directed cycles.
     Raises ValueError on construction if a cycle is detected.
 
-    Inherits all DirectedGraph methods (has_path, has_cycle, transpose, …).
+    Example
+    -------
+    >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D')])
+    >>> g = DAG(edges=[('design','backend'), ('design','frontend'),
+    ...                ('backend','tests'), ('frontend','tests')])
     """
 
-    def __init__(self, edges=None, nodes=None):
-        super().__init__(edges=edges, nodes=nodes)
+    def __init__(self, edges=None, nodes=None, debug=False):
+        """
+        Parameters
+        ----------
+        edges : list of (str, str) tuples   directed edges (src, dst)
+        nodes : list of str (optional)
+        debug : bool (default False)
+
+        Raises
+        ------
+        ValueError   if the supplied edges form a directed cycle
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('B','C'), ('A','C')], debug=False)
+        >>> DAG(edges=[('A','B'), ('B','A')])   # raises ValueError
+        """
+        super().__init__(edges=edges, nodes=nodes, debug=debug)
         if self.has_cycle():
             raise ValueError("Edges form a directed cycle — not a valid DAG.")
+        if self._debug:
+            print("  DAG validation passed (no directed cycle).")
 
     # ── simple accessors ──────────────────────────────────────────────
 
     def roots(self):
-        """Nodes with no incoming arrows — the entry points."""
+        """
+        Nodes with no incoming arrows (entry points / sources).
+        In a dependency graph these are tasks with no prerequisites.
+
+        Returns
+        -------
+        list of str
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D')])
+        >>> g.roots()
+        ['A']
+        """
         return sorted(n for n in self._forward_adj if not self._reverse_adj[n])
 
     def leaves(self):
-        """Nodes with no outgoing arrows — the dead ends / final outputs."""
+        """
+        Nodes with no outgoing arrows (sinks / outputs).
+        In a dependency graph these are the final products.
+
+        Returns
+        -------
+        list of str
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D')])
+        >>> g.leaves()
+        ['D']
+        """
         return sorted(n for n in self._forward_adj if not self._forward_adj[n])
 
     # ── core algorithms ────────────────────────────────────────────────
@@ -591,28 +1014,76 @@ class DAG(DirectedGraph):
     def topological_sort(self):
         """
         ITERATIVE — Kahn's algorithm (BFS over in-degree counts).
+        Return nodes in an order where every node appears only AFTER
+        all the nodes it depends on.  Ties broken alphabetically.
 
-        Returns nodes in an order where every node appears only AFTER
-        all the nodes it depends on (all its predecessors).
-        Alphabetical tie-breaking makes the result deterministic.
+        Returns
+        -------
+        list of str
+
+        Example
+        -------
+        >>> g = DAG(edges=[('design','backend'), ('design','frontend'),
+        ...                ('backend','tests'), ('frontend','tests'),
+        ...                ('tests','deploy')])
+        >>> g.topological_sort()
+        ['design', 'backend', 'frontend', 'tests', 'deploy']
         """
         in_deg = {n: self.in_degree(n) for n in self._forward_adj}
         queue  = sorted(n for n in in_deg if in_deg[n] == 0)
         result = []
+
+        if self._debug:
+            print(f"\n[DAG.topological_sort]  Kahn's algorithm")
+            print("  in-degree = how many arrows arrive at each node?")
+            print("  Nodes with in-degree 0 can start immediately.")
+            print()
+            print("  in-degree table:")
+            for nd in sorted(in_deg):
+                print(f"    {nd}: {in_deg[nd]}")
+            print(f"\n  Initial queue (in-degree-0 nodes): {queue}")
+            print()
+
+        step = 0
         while queue:
             node = queue.pop(0)
             result.append(node)
+            step += 1
+            if self._debug:
+                print(f"  Step {step}: process '{node}'  -> result: {result}")
             for child in sorted(self._forward_adj[node]):
                 in_deg[child] -= 1
+                if self._debug:
+                    print(f"    decrement in-deg['{child}']: -> {in_deg[child]}"
+                          + (" -> add to queue!" if in_deg[child] == 0 else ""))
                 if in_deg[child] == 0:
                     queue.append(child)
                     queue.sort()
+
+        if self._debug:
+            print(f"\n  Final order: {' -> '.join(result)}")
         return result
 
     def descendants(self, node):
         """
-        RECURSIVE — simple DFS (forward graph).
-        All nodes reachable FROM node following arrows (node itself excluded).
+        RECURSIVE — simple DFS following arrows forward.
+        Return all nodes reachable FROM node (node itself excluded).
+
+        Parameters
+        ----------
+        node : str
+
+        Returns
+        -------
+        list of str (sorted)
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D')])
+        >>> g.descendants('A')
+        ['B', 'C', 'D']
+        >>> g.descendants('B')
+        ['D']
         """
         visited = set()
 
@@ -623,13 +1094,32 @@ class DAG(DirectedGraph):
                     dfs(v)
 
         dfs(node)
-        return sorted(visited)
+        result = sorted(visited)
+
+        if self._debug:
+            print(f"\n[DAG.descendants]  reachable from '{node}': {result}")
+        return result
 
     def ancestors(self, node):
         """
-        RECURSIVE — simple DFS (reverse graph).
-        All nodes that can reach node by following arrows (node itself excluded).
-        Walks _reverse_adj to travel upstream.
+        RECURSIVE — DFS on the reverse graph (_reverse_adj).
+        Return all nodes that can reach node (node itself excluded).
+
+        Parameters
+        ----------
+        node : str
+
+        Returns
+        -------
+        list of str (sorted)
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','C'), ('B','C'), ('C','D')])
+        >>> g.ancestors('D')
+        ['A', 'B', 'C']
+        >>> g.ancestors('A')   # nothing points to A
+        []
         """
         visited = set()
 
@@ -640,14 +1130,33 @@ class DAG(DirectedGraph):
                     dfs(v)
 
         dfs(node)
-        return sorted(visited)
+        result = sorted(visited)
+
+        if self._debug:
+            print(f"\n[DAG.ancestors]  can reach '{node}': {result}  (DFS on _reverse_adj)")
+        return result
 
     def all_paths(self, src, dst):
         """
         RECURSIVE — DFS with backtracking.
-        Every directed route from src to dst as a list of node lists.
-        No cycle-detection needed here because a DAG can never cycle.
-        Warning: can return exponentially many paths on a dense DAG.
+        Return every directed simple path from src to dst.
+
+        Parameters
+        ----------
+        src : str
+        dst : str
+
+        Returns
+        -------
+        list of list[str]   e.g. [['A','B','D'], ['A','C','D']]
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D')])
+        >>> g.all_paths('A', 'D')
+        [['A', 'B', 'D'], ['A', 'C', 'D']]
+        >>> g.all_paths('B', 'A')   # no upstream path in a DAG
+        []
         """
         result = []
 
@@ -664,46 +1173,102 @@ class DAG(DirectedGraph):
                     on_path.remove(v)
 
         dfs(src, [src], {src})
+
+        if self._debug:
+            print(f"\n[DAG.all_paths]  '{src}' -> '{dst}'  ({len(result)} paths):")
+            for p in result:
+                print(f"  {' -> '.join(p)}")
+
         return result
 
     def shortest_path(self, src, dst):
         """
         ITERATIVE — BFS (list used as FIFO queue).
-        Path with the fewest edges from src to dst, or [] if no path.
-        BFS guarantees the first time dst is reached = shortest route.
+        Return the path using the fewest edges from src to dst, or []
+        if no directed path exists.
+
+        Parameters
+        ----------
+        src : str
+        dst : str
+
+        Returns
+        -------
+        list of str   e.g. ['A', 'B', 'D']  or  []
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D'), ('C','E')])
+        >>> g.shortest_path('A', 'D')
+        ['A', 'B', 'D']
+        >>> g.shortest_path('D', 'A')   # no reverse path
+        []
         """
         if src not in self._forward_adj or dst not in self._forward_adj:
             return []
+
+        if self._debug:
+            print(f"\n[DAG.shortest_path]  '{src}' -> '{dst}'  (BFS)")
+            print("  BFS guarantees: first arrival at dst = fewest edges.")
+
         queue   = [[src]]
         visited = {src}
+
         while queue:
             path = queue.pop(0)
             node = path[-1]
             if node == dst:
+                if self._debug:
+                    print(f"  Shortest path ({len(path)-1} edges): {' -> '.join(path)}")
                 return path
             for child in self._forward_adj.get(node, []):
                 if child not in visited:
                     visited.add(child)
                     queue.append(path + [child])
+
+        if self._debug:
+            print(f"  No path from '{src}' to '{dst}'")
         return []
 
     def longest_path(self, src, dst):
         """
         ITERATIVE — DP over topological order, O(V + E).
-        Path with the most edges from src to dst, or [] if no path.
+        Return the path using the most edges from src to dst, or []
+        if no directed path exists.
 
-        dist[v] = max edge-count from src to v  (-1 = not yet reached).
-        prev[v] = predecessor on the best known path to v.
+        This is easy on a DAG but NP-hard on general graphs with cycles.
+        Topological order guarantees dist[u] is finalised before we relax
+        u's outgoing edges.
 
-        We process nodes in topological order, so when we relax u's edges,
-        dist[u] is already its final value (nothing can improve it later).
-        This is what makes longest path tractable on a DAG but NP-hard
-        on general graphs with cycles.
+        Parameters
+        ----------
+        src : str
+        dst : str
+
+        Returns
+        -------
+        list of str   e.g. ['A', 'C', 'D']  or  []
+
+        Example
+        -------
+        >>> g = DAG(edges=[('A','B'), ('A','C'), ('B','D'), ('C','D')])
+        >>> g.longest_path('A', 'D')     # A->B->D and A->C->D are both length 2
+        ['A', 'B', 'D']
+        >>> g.longest_path('B', 'A')     # no reverse path
+        []
         """
         topo = self.topological_sort()
         dist = {n: -1   for n in topo}
         prev = {n: None for n in topo}
         dist[src] = 0
+
+        if self._debug:
+            print(f"\n[DAG.longest_path]  '{src}' -> '{dst}'  (DP over topo order)")
+            print("  dist[v] = max edges from src to v  (-1 = not reached yet)")
+            print(f"  Topo order: {topo}")
+            print(f"  Initial: dist['{src}']=0, rest=-1")
+            print()
+
         for u in topo:
             if dist[u] == -1:
                 continue
@@ -711,13 +1276,23 @@ class DAG(DirectedGraph):
                 if dist[u] + 1 > dist[v]:
                     dist[v] = dist[u] + 1
                     prev[v] = u
+                    if self._debug:
+                        print(f"  Relax '{u}'->'{v}': dist['{v}'] = {dist[v]}")
+
         if dist.get(dst, -1) == -1:
+            if self._debug:
+                print(f"  '{dst}' unreachable -> []")
             return []
+
         path, cur = [], dst
         while cur is not None:
             path.append(cur)
             cur = prev[cur]
-        return path[::-1]
+        path.reverse()
+
+        if self._debug:
+            print(f"\n  Longest path ({len(path)-1} edges): {' -> '.join(path)}")
+        return path
 
 
 # ====================================================================== #
@@ -727,19 +1302,35 @@ class DAG(DirectedGraph):
 class Tree(DAG):
     """
     Rooted directed tree.
-    Extends DAG by requiring that every non-root node has EXACTLY one parent.
+    Every non-root node has EXACTLY ONE parent.
     Raises ValueError if that constraint is violated.
 
-    Inherits all DAG methods (topological_sort, descendants, ancestors,
-    shortest_path, longest_path, all_paths, …).
+    Example
+    -------
+    >>> t = Tree(root='root', edges=[('root','A'),('root','B'),('A','C')])
+    >>> t = Tree(root='f5', edges=[('f5','f4'),('f5','f3'),('f4','f2')])
     """
 
-    def __init__(self, root, edges=None):
+    def __init__(self, root, edges=None, debug=False):
         """
-        root  : str — the root node name
-        edges : list of (parent, child) tuples
+        Parameters
+        ----------
+        root  : str             the root node name (string)
+        edges : list of (str, str) tuples   (parent, child) pairs
+        debug : bool (default False)
+
+        Raises
+        ------
+        ValueError   if any non-root node has != 1 parent
+
+        Example
+        -------
+        >>> t = Tree(root='A', edges=[('A','B'), ('A','C'), ('B','D')])
+        >>> t.root
+        'A'
         """
-        super().__init__(edges=edges, nodes=[root])
+        super().__init__(edges=edges, nodes=[root], debug=debug)
+
         for n in self.nodes():
             if n != root and self.in_degree(n) != 1:
                 raise ValueError(
@@ -747,30 +1338,109 @@ class Tree(DAG):
                     f" — every non-root must have exactly one parent.")
         self.root = root
 
+        if self._debug:
+            print(f"\n[Tree.__init__]  Validation")
+            print(f"  Root: '{root}' (in-degree=0)")
+            for n in sorted(self.nodes()):
+                if n != root:
+                    print(f"  '{n}': in-degree={self.in_degree(n)}"
+                          f"  parent='{self.parent(n)}'  depth={self.depth(n)}")
+            print(f"  Tree height: {self.height()}")
+
     # ── accessors ─────────────────────────────────────────────────────
 
     def parent(self, node):
-        """The unique parent of node, or None when node is the root."""
+        """
+        The unique parent of node, or None for the root.
+
+        Parameters
+        ----------
+        node : str
+
+        Returns
+        -------
+        str or None
+
+        Example
+        -------
+        >>> t = Tree(root='A', edges=[('A','B'), ('B','C')])
+        >>> t.parent('C')
+        'B'
+        >>> t.parent('A')   # root has no parent
+        None
+        """
         p = self.parents(node)
         return p[0] if p else None
 
     def is_leaf(self, node):
-        """True when node has no children (is a leaf node)."""
+        """
+        True when node has no children (is at the bottom of the tree).
+
+        Parameters
+        ----------
+        node : str
+
+        Returns
+        -------
+        bool
+
+        Example
+        -------
+        >>> t = Tree(root='A', edges=[('A','B'), ('A','C')])
+        >>> t.is_leaf('B')
+        True
+        >>> t.is_leaf('A')
+        False
+        """
         return self.out_degree(node) == 0
 
     def siblings(self, node):
-        """Other children of the same parent (empty list for the root)."""
+        """
+        Other children of the same parent (empty list for the root).
+
+        Parameters
+        ----------
+        node : str
+
+        Returns
+        -------
+        list of str (sorted)
+
+        Example
+        -------
+        >>> t = Tree(root='R', edges=[('R','A'),('R','B'),('R','C'),('A','D')])
+        >>> t.siblings('B')
+        ['A', 'C']
+        >>> t.siblings('R')   # root has no parent -> no siblings
+        []
+        """
         par = self.parent(node)
         if par is None:
             return []
         return sorted(c for c in self.children(par) if c != node)
 
-    # ── depth / height ─────────────────────────────────────────────────
-
     def depth(self, node):
         """
         RECURSIVE.
-        Number of steps from the root down to node (root has depth 0).
+        Distance from the root down to node (root has depth 0).
+
+        Parameters
+        ----------
+        node : str
+
+        Returns
+        -------
+        int
+
+        Example
+        -------
+        >>> t = Tree(root='A', edges=[('A','B'), ('B','C'), ('B','D')])
+        >>> t.depth('A')
+        0
+        >>> t.depth('B')
+        1
+        >>> t.depth('C')
+        2
         """
         if node == self.root:
             return 0
@@ -779,9 +1449,20 @@ class Tree(DAG):
     def height(self):
         """
         RECURSIVE — DFS from root.
-        Depth of the deepest leaf (root-only tree has height 0).
-        More efficient than max(depth(n) for n in …) because it
-        visits each node once rather than tracing root→node per leaf.
+        Depth of the deepest leaf (0 for a single-node tree).
+        More efficient than max(depth(n) for leaves) because it
+        visits each node once.
+
+        Returns
+        -------
+        int
+
+        Example
+        -------
+        >>> Tree(root='A', edges=[('A','B'),('B','C')]).height()
+        2
+        >>> Tree(root='A').height()   # single node
+        0
         """
         def dfs(u):
             ch = self.children(u)
@@ -794,27 +1475,59 @@ class Tree(DAG):
     def nodes_at_depth(self, d):
         """
         RECURSIVE — DFS.
-        All nodes exactly d steps below the root, returned sorted.
+        All nodes exactly d steps below the root (sorted).
+
+        Parameters
+        ----------
+        d : int   desired depth (0 = root only)
+
+        Returns
+        -------
+        list of str
+
+        Example
+        -------
+        >>> t = Tree(root='R', edges=[('R','A'),('R','B'),('A','C'),('B','D')])
+        >>> t.nodes_at_depth(0)
+        ['R']
+        >>> t.nodes_at_depth(1)
+        ['A', 'B']
+        >>> t.nodes_at_depth(2)
+        ['C', 'D']
         """
         result = []
 
-        def dfs(u, current):
-            if current == d:
+        def dfs(u, cur):
+            if cur == d:
                 result.append(u)
                 return
             for v in self.children(u):
-                dfs(v, current + 1)
+                dfs(v, cur + 1)
 
         dfs(self.root, 0)
         return sorted(result)
 
-    # ── structural extraction ──────────────────────────────────────────
-
     def subtree(self, node):
         """
         RECURSIVE — DFS.
-        Return a new Tree containing `node` and all its descendants,
-        with `node` as the new root.
+        Return a new Tree rooted at node containing node and all its
+        descendants.  The original tree is not modified.
+
+        Parameters
+        ----------
+        node : str   must be a node in this tree
+
+        Returns
+        -------
+        Tree
+
+        Example
+        -------
+        >>> t = Tree(root='R', edges=[('R','A'),('R','B'),('A','C'),('A','D')])
+        >>> t.subtree('A').nodes()
+        ['A', 'C', 'D']
+        >>> t.subtree('A').root
+        'A'
         """
         edges = []
 
@@ -824,16 +1537,33 @@ class Tree(DAG):
                 dfs(v)
 
         dfs(node)
-        return Tree(root=node, edges=edges)
+        return Tree(root=node, edges=edges, debug=self._debug)
 
     def lca(self, a, b):
         """
-        Lowest Common Ancestor — the deepest node that is an ancestor
-        of BOTH a and b (or a/b itself if one is an ancestor of the other).
+        Lowest Common Ancestor.
+        The deepest node that is an ancestor of BOTH a and b
+        (or a/b itself when one is a direct ancestor of the other).
 
-        Strategy: walk from a up to root collecting all visited ancestors,
-        then walk from b up until we hit a node in that set.
-        O(depth(a) + depth(b)).
+        Parameters
+        ----------
+        a : str   first node
+        b : str   second node
+
+        Returns
+        -------
+        str or None   (None only when a and b are in disconnected trees)
+
+        Example
+        -------
+        >>> t = Tree(root='root', edges=[('root','A'),('root','B'),
+        ...                              ('A','C'),('A','D'),('B','E')])
+        >>> t.lca('C', 'D')    # C and D share parent A
+        'A'
+        >>> t.lca('C', 'E')    # C is under A, E is under B -> meet at root
+        'root'
+        >>> t.lca('root', 'C') # root is an ancestor of C
+        'root'
         """
         path_a = set()
         node   = a
@@ -844,17 +1574,29 @@ class Tree(DAG):
         node = b
         while node is not None:
             if node in path_a:
+                if self._debug:
+                    print(f"\n[Tree.lca]  lca('{a}','{b}') = '{node}'")
+                    print(f"  Ancestors of '{a}': {sorted(path_a)}")
+                    print(f"  Walk up from '{b}' until crossing that set: '{node}'")
                 return node
             node = self.parent(node)
 
-        return None    # only happens if a and b are in different trees
-
-    # ── traversals ────────────────────────────────────────────────────
+        return None
 
     def pre_order(self):
         """
         RECURSIVE — DFS, root first (parent visited BEFORE its children).
-        Matches the order in which a recursive function is called.
+        Matches the order in which a recursive function is CALLED.
+
+        Returns
+        -------
+        list of str
+
+        Example
+        -------
+        >>> t = Tree(root='A', edges=[('A','B'),('A','C'),('B','D')])
+        >>> t.pre_order()
+        ['A', 'B', 'D', 'C']
         """
         result = []
 
@@ -868,8 +1610,18 @@ class Tree(DAG):
 
     def post_order(self):
         """
-        RECURSIVE — DFS, leaves first (children visited BEFORE parent).
-        Matches the order in which a recursive function returns.
+        RECURSIVE — DFS, leaves first (parent visited AFTER all its children).
+        Matches the order in which a recursive function RETURNS.
+
+        Returns
+        -------
+        list of str
+
+        Example
+        -------
+        >>> t = Tree(root='A', edges=[('A','B'),('A','C'),('B','D')])
+        >>> t.post_order()
+        ['D', 'B', 'C', 'A']
         """
         result = []
 
@@ -889,16 +1641,30 @@ class Tree(DAG):
 def tsp(graph, distances, start=None):
     """
     RECURSIVE — DFS with backtracking.
-
     Find a minimum-cost Hamiltonian cycle: visit every node exactly once
-    and return to the starting node using the least total distance.
+    and return to the starting node with the least total distance.
 
-    graph     : Graph  (typically a complete undirected graph)
-    distances : dict of {(a, b): cost}  — symmetric (both orders looked up)
-    start     : starting node; defaults to the first alphabetical node
+    Parameters
+    ----------
+    graph     : Graph                   any undirected Graph (usually complete)
+    distances : dict of {(str,str): number}
+                edge weights; symmetric — both (a,b) and (b,a) are looked up.
+                e.g. {('A','B'): 5, ('B','C'): 3, ('A','C'): 7}
+    start     : str (optional)          starting node; default = first alphabetical
 
-    Returns (min_cost, path) where path includes the return to start.
-    Complexity: O(n!) — practical only for small n (~10 or fewer cities).
+    Returns
+    -------
+    (float, list of str)   (min_cost, path)
+    path includes the return to start, e.g. ['A','B','C','A']
+
+    Complexity: O(n!) — practical only for small n (≤ 10 or so).
+
+    Example
+    -------
+    >>> cities = Graph(edges=[('A','B'),('A','C'),('B','C')])
+    >>> d = {('A','B'): 2, ('B','C'): 3, ('A','C'): 9}
+    >>> tsp(cities, d, start='A')
+    (14, ['A', 'B', 'C', 'A'])
     """
     nodes = graph.nodes()
     if not nodes:
@@ -907,7 +1673,8 @@ def tsp(graph, distances, start=None):
         start = nodes[0]
 
     def dist(a, b):
-        return distances.get((a, b)) or distances.get((b, a), float("inf"))
+        return distances.get((a, b)) or distances.get((b, a), float('inf'))
+
 
     best = [float("inf"), None]
 
@@ -928,19 +1695,34 @@ def tsp(graph, distances, start=None):
     return best[0], best[1]
 
 
-def build_hanoi_tree(n, src="A", dst="C", via="B"):
+def build_hanoi_tree(n, src="A", dst="C", via="B", debug=False):
     """
     RECURSIVE — build the call tree for Tower of Hanoi(n discs).
 
-    Each tree node = one recursive call, labelled 'h(discs,src>dst)#id'.
-    Unique '#id' suffix avoids duplicate labels when the same call
-    (n, src, dst) appears in multiple branches.
+    Each node represents one recursive call: 'h(discs,src>dst)#id'.
+    Pre-order  = order calls are MADE  (push onto call stack).
+    Post-order = order calls RETURN (leaves = actual disc moves).
 
-    Pre-order  traversal = order calls are MADE (recursive descent).
-    Post-order traversal = order calls RETURN (includes base-case moves).
-    Leaves               = base cases (n=1): one concrete disc move each.
+    Parameters
+    ----------
+    n   : int   number of discs, e.g.  build_hanoi_tree(3)
+    src : str   source peg name         default 'A'
+    dst : str   destination peg         default 'C'
+    via : str   intermediate peg        default 'B'
 
-    Returns a Tree.
+    Returns
+    -------
+    Tree
+
+    Example
+    -------
+    >>> t = build_hanoi_tree(3)
+    >>> len(t.nodes())    # 2^3 - 1 = 7
+    7
+    >>> t.height()        # 0-indexed depth of deepest leaf
+    2
+    >>> len(t.leaves())   # 4 actual disc moves
+    4
     """
     uid   = [0]
     root  = [None]
@@ -954,11 +1736,11 @@ def build_hanoi_tree(n, src="A", dst="C", via="B"):
         else:
             edges.append((parent_label, label))
         if n > 1:
-            rec(n - 1, src, via, dst, label)   # move top (n-1) discs: src → via
-            rec(n - 1, via, dst, src, label)   # move top (n-1) discs: via → dst
+            rec(n - 1, src, via, dst, label)
+            rec(n - 1, via, dst, src, label)
 
     rec(n, src, dst, via, None)
-    return Tree(root=root[0], edges=edges)
+    return Tree(root=root[0], edges=edges, debug=debug)
 
 
 # ====================================================================== #
@@ -966,200 +1748,132 @@ def build_hanoi_tree(n, src="A", dst="C", via="B"):
 # ====================================================================== #
 
 if __name__ == "__main__":
+    import sys
+    DEBUG = "--debug" in sys.argv
+    if DEBUG:
+        print("[debug=True] All graphs will print internal data structures.\n")
+    else:
+        print("[debug=False] Run with --debug for step-by-step explanations.\n")
 
     SEP = "=" * 62
 
-    # ------------------------------------------------------------------ #
-    #  1. Fibonacci — DAG of overlapping subproblems                     #
-    # ------------------------------------------------------------------ #
-    # Edge f(a) → f(b) means "computing f(a) needs f(b) first".
-    # Topological sort = memoized top-down call order.
-    # Nodes with in_degree > 1 are shared subproblems → saved by memoization.
-
+    # 1. Fibonacci ──────────────────────────────────────────────────────
     print(SEP)
     print("1. FIBONACCI — subproblem DAG")
     print(SEP)
-
     fib = DAG(edges=[
-        ("f5", "f4"), ("f5", "f3"),
-        ("f4", "f3"), ("f4", "f2"),
-        ("f3", "f2"), ("f3", "f1"),
-        ("f2", "f1"), ("f2", "f0"),
+        ("f5","f4"),("f5","f3"),("f4","f3"),("f4","f2"),
+        ("f3","f2"),("f3","f1"),("f2","f1"),("f2","f0"),
     ])
-
     order  = fib.topological_sort()
     shared = [n for n in fib.nodes() if fib.in_degree(n) > 1]
-
-    print("Evaluation order (topological sort):")
-    print(" ", " → ".join(order))
+    print("Evaluation order:", " -> ".join(order))
     print("Shared subproblems (in-degree > 1):", shared)
-    print("  → without memoization these are recomputed many times")
-    print("has_path f5→f0 :", fib.has_path("f5", "f0"))
-    print("all paths f5→f0:", fib.all_paths("f5", "f0"))
+    print("has_path f5->f0 :", fib.has_path("f5", "f0"))
+    print("all paths f5->f0:", fib.all_paths("f5", "f0"))
 
-    # ------------------------------------------------------------------ #
-    #  2. Tower of Hanoi — recursive call Tree                           #
-    # ------------------------------------------------------------------ #
-    # Pre-order  = order calls are MADE (push onto call stack).
-    # Post-order = order calls RETURN (each leaf = one disc move).
-
+    # 2. Tower of Hanoi ─────────────────────────────────────────────────
     print()
     print(SEP)
     print("2. TOWER OF HANOI — recursive call Tree (n=3)")
     print(SEP)
-
-    ht   = build_hanoi_tree(n=3)
-    pre  = ht.pre_order()
+    ht  = build_hanoi_tree(n=3, debug=DEBUG)
+    pre = ht.pre_order()
     post = ht.post_order()
-
-    print(f"Nodes: {len(ht.nodes())} (= 2^n-1)   height: {ht.height()}")
+    print(f"Nodes: {len(ht.nodes())} (= 2^n-1)")
+    print(f"Height: {ht.height()}  (root depth 0; leaves at depth n-1=2)")
     print(f"LCA of first and last leaf: {ht.lca(pre[-1], pre[1])}")
     print()
     print("Pre-order (call sequence):")
     for node in pre:
         d = ht.depth(node)
-        print(f"  {'  '*d}→ {node}")
+        print(f"  {'  '*d}-> {node}")
     print()
     print("Leaf nodes = actual disc moves (post-order):")
     for node in post:
         if ht.is_leaf(node):
             print(f"  {node}")
 
-    # ------------------------------------------------------------------ #
-    #  3. Task Scheduling — DAG topological sort + critical path         #
-    # ------------------------------------------------------------------ #
-
+    # 3. Task Scheduling ────────────────────────────────────────────────
     print()
     print(SEP)
     print("3. TASK SCHEDULING — DAG")
     print(SEP)
-
     tasks = DAG(edges=[
-        ("design",   "backend"),
-        ("design",   "frontend"),
-        ("backend",  "tests"),
-        ("frontend", "tests"),
-        ("tests",    "deploy"),
+        ("design","backend"),("design","frontend"),
+        ("backend","tests"),("frontend","tests"),("tests","deploy"),
     ])
+    print("Valid schedule  :", " -> ".join(tasks.topological_sort()))
+    print("Critical path   :", " -> ".join(tasks.longest_path("design","deploy")))
+    print("Shortest path   :", " -> ".join(tasks.shortest_path("design","deploy")))
+    print("All paths       :", tasks.all_paths("design","deploy"))
+    print("Ancestors/deploy:", tasks.ancestors("deploy"))
 
-    print("Valid schedule  :", " → ".join(tasks.topological_sort()))
-    print("Critical path   :", " → ".join(tasks.longest_path("design", "deploy")))
-    print("Shortest path   :", " → ".join(tasks.shortest_path("design", "deploy")))
-    print("All paths       :", tasks.all_paths("design", "deploy"))
-    print("Descendants of design:", tasks.descendants("design"))
-
-    # ------------------------------------------------------------------ #
-    #  4. Sensor Network Coverage — Graph minimum dominating set         #
-    # ------------------------------------------------------------------ #
-    # Edges are bidirectional (roads), so we use Graph, not DAG.
-    # Note: this graph has TWO disconnected components.
-
+    # 4. Sensor Coverage ────────────────────────────────────────────────
     print()
     print(SEP)
     print("4. SENSOR NETWORK COVERAGE — Graph")
     print(SEP)
-
-    locaties = Graph(edges=[
-        ("R", "Q"), ("U", "Z"), ("K", "Y"), ("Q", "Z"), ("L", "K")
-    ])
-
+    locaties = Graph(edges=[("R","Q"),("U","Z"),("K","Y"),("Q","Z"),("L","K")])
     comps     = locaties.connected_components()
     solutions = locaties.minimum_dominating_sets()
-
-    print(f"Nodes      : {locaties.nodes()}")
-    print(f"Connected? : {locaties.is_connected()}  → two separate islands!")
-    print(f"Components : {comps}")
-    print(f"  → minimum relay set needs at least one node from each island")
-    print()
-    print(f"Minimum relay size : {len(solutions[0])}")
-    print("All optimal relay sets:")
+    print(f"Nodes          : {locaties.nodes()}")
+    print(f"Connected?     : {locaties.is_connected()}  -> two islands")
+    print(f"Components     : {comps}")
+    print(f"Min relay size : {len(solutions[0])}")
+    print("All optimal sets:")
     for s in format_solutions(solutions, sep=", "):
         print(f"  {{ {s} }}")
     print()
-    print("has_path K→Z :", locaties.has_path("K", "Z"))
-    print("all_paths R→Z:", locaties.all_paths("R", "Z"))
+    print("has_path K->Z  :", locaties.has_path("K", "Z"))
+    print("all_paths R->Z :", locaties.all_paths("R", "Z"))
 
-    # ------------------------------------------------------------------ #
-    #  5. Traveling Salesman — backtracking on complete Graph            #
-    # ------------------------------------------------------------------ #
-
+    # 5. Traveling Salesman ─────────────────────────────────────────────
     print()
     print(SEP)
     print("5. TRAVELING SALESMAN — backtracking on complete Graph")
     print(SEP)
-
-    cities = Graph(edges=[
-        ("A", "B"), ("A", "C"), ("A", "D"),
-        ("B", "C"), ("B", "D"), ("C", "D"),
-    ])
-
-    d = {
-        ("A", "B"): 2, ("A", "C"): 9, ("A", "D"): 10,
-        ("B", "C"): 6, ("B", "D"): 4, ("C", "D"):  3,
-    }
-
+    cities = Graph(edges=[("A","B"),("A","C"),("A","D"),("B","C"),("B","D"),("C","D")])
+    d = {("A","B"):2,("A","C"):9,("A","D"):10,("B","C"):6,("B","D"):4,("C","D"):3}
     cost, path = tsp(cities, d, start="A")
+    print(f"Cities         : {cities.nodes()}")
+    print(f"Optimal tour   : {' -> '.join(path)}")
+    print(f"Total distance : {cost}")
+    print("  -> A->B(2)+B->D(4)+D->C(3)+C->A(9) = 18")
 
-    print(f"Cities     : {cities.nodes()}")
-    print(f"Connected? : {cities.is_connected()}")
-    print(f"Optimal tour (from A) : {' → '.join(path)}")
-    print(f"Total distance        : {cost}")
-    print("  → A→B(2)+B→D(4)+D→C(3)+C→A(9) = 18")
-
-    # ------------------------------------------------------------------ #
-    #  Cycle / SCC demo                                                   #
-    # ------------------------------------------------------------------ #
-
+    # Cycle / SCC demo ──────────────────────────────────────────────────
     print()
     print(SEP)
     print("CYCLE DETECTION + SCC demo")
     print(SEP)
-
-    dg = DirectedGraph(edges=[
-        ("A", "B"), ("B", "C"), ("C", "A"),   # SCC: {A,B,C}
-        ("B", "D"),                            # D only reachable, not part of cycle
-    ])
-    print("DirectedGraph A→B→C→A (+ B→D)")
+    dg = DirectedGraph(edges=[("A","B"),("B","C"),("C","A"),("B","D")], debug=DEBUG)
+    print("A->B->C->A (+ B->D)")
     print("  has_cycle():", dg.has_cycle())
-    print("  strongly_connected_components():", dg.strongly_connected_components())
-    print("  transpose edges:", dg.transpose().edges())
-
+    print("  SCCs       :", dg.strongly_connected_components())
+    print("  transpose  :", dg.transpose().edges())
     try:
-        DAG(edges=[("X", "Y"), ("Y", "Z"), ("Z", "X")])
+        DAG(edges=[("X","Y"),("Y","Z"),("Z","X")])
     except ValueError as e:
-        print(f"\nDAG(X→Y→Z→X): {e}")
-
+        print(f"\nDAG(X->Y->Z->X): {e}")
     try:
-        AcyclicGraph(edges=[("P", "Q"), ("Q", "R"), ("R", "P")])
+        AcyclicGraph(edges=[("P","Q"),("Q","R"),("R","P")])
     except ValueError as e:
         print(f"AcyclicGraph(P-Q-R-P): {e}")
 
-    # ------------------------------------------------------------------ #
-    #  Tree extras demo                                                   #
-    # ------------------------------------------------------------------ #
-
+    # Tree extras ───────────────────────────────────────────────────────
     print()
     print(SEP)
     print("TREE extras — subtree, lca, nodes_at_depth, siblings")
     print(SEP)
-
-    #        root
-    #       /    \
-    #      A      B
-    #     / \      \
-    #    C   D      E
-
     t = Tree(root="root", edges=[
-        ("root", "A"), ("root", "B"),
-        ("A", "C"),    ("A", "D"),
-        ("B", "E"),
-    ])
-
-    print("height()         :", t.height())
-    print("nodes_at_depth(2):", t.nodes_at_depth(2))
-    print("lca(C, E)        :", t.lca("C", "E"))
-    print("lca(C, D)        :", t.lca("C", "D"))
-    print("siblings(C)      :", t.siblings("C"))
+        ("root","A"),("root","B"),("A","C"),("A","D"),("B","E"),
+    ], debug=DEBUG)
+    print("height()          :", t.height())
+    print("nodes_at_depth(2) :", t.nodes_at_depth(2))
+    print("lca(C, E)         :", t.lca("C","E"))
+    print("lca(C, D)         :", t.lca("C","D"))
+    print("siblings(C)       :", t.siblings("C"))
     print("subtree(A).nodes():", t.subtree("A").nodes())
-    print("is_leaf(C)       :", t.is_leaf("C"))
-    print("is_leaf(A)       :", t.is_leaf("A"))
+    print("is_leaf(C)        :", t.is_leaf("C"))
+    print("pre_order()       :", t.pre_order())
+    print("post_order()      :", t.post_order())
