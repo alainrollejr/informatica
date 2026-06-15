@@ -92,11 +92,16 @@ class Graph:
 
         if nodes:
             for n in nodes:
-                self._ensure(n)
+                # register node n if it does not yet exist
+                if n not in self._adj:
+                    self._adj[n] = []
         if edges:
             for a, b in edges:
-                self._ensure(a)
-                self._ensure(b)
+                # register each endpoint if it does not yet exist
+                if a not in self._adj:
+                    self._adj[a] = []
+                if b not in self._adj:
+                    self._adj[b] = []
                 if b not in self._adj[a]:
                     self._adj[a].append(b)
                 if a not in self._adj[b]:
@@ -118,11 +123,6 @@ class Graph:
             else:
                 print("  (no nodes yet)")
             print()
-
-    def _ensure(self, n):
-        """(private) register node n if it does not yet exist."""
-        if n not in self._adj:
-            self._adj[n] = []
 
     # ── simple accessors ──────────────────────────────────────────────
 
@@ -255,6 +255,54 @@ class Graph:
 
         if self._debug:
             print(f"  Queue empty, '{dst}' never reached -> False")
+        return False
+
+    def has_path_with_maximum_length(self, src, dst, max_length):
+        """
+        ITERATIVE — BFS with hop counter.
+        Return True if a path from src to dst exists using at most
+        max_length edges.
+
+        Parameters
+        ----------
+        src        : str   starting node
+        dst        : str   destination node
+        max_length : int   maximum number of edges allowed on the path
+
+        Example
+        -------
+        >>> g = Graph(edges=[('A','B'), ('B','C'), ('A','C')])
+        >>> g.has_path_with_maximum_length('A', 'C', 1)   # direct edge A-C exists
+        True
+        >>> g.has_path_with_maximum_length('A', 'C', 0)   # need at least 1 hop
+        False
+        >>> g = Graph(edges=[('A','B'), ('B','C'), ('C','D')])
+        >>> g.has_path_with_maximum_length('A', 'D', 2)   # shortest path is 3 hops
+        False
+        >>> g.has_path_with_maximum_length('A', 'D', 3)
+        True
+        """
+        if src == dst:
+            return True
+
+        # BFS — each queue entry is (node, distance_so_far).
+        # BFS explores in order of increasing distance, so the first time
+        # we reach dst it is via the shortest path.  If that path length
+        # exceeds max_length we can stop immediately.
+        visited = {src}
+        queue   = [(src, 0)]
+
+        while queue:
+            node, dist = queue.pop(0)
+            if dist >= max_length:
+                continue
+            for v in self._adj.get(node, []):
+                if v == dst:
+                    return True
+                if v not in visited:
+                    visited.add(v)
+                    queue.append((v, dist + 1))
+
         return False
 
     def is_connected(self):
@@ -604,10 +652,24 @@ class DirectedGraph:
 
         if nodes:
             for n in nodes:
-                self._ensure(n)
+                # register node n if it does not yet exist
+                if n not in self._forward_adj:
+                    self._forward_adj[n] = []
+                    self._reverse_adj[n] = []
         if edges:
             for src, dst in edges:
-                self._link(src, dst)
+                # register each endpoint if it does not yet exist
+                if src not in self._forward_adj:
+                    self._forward_adj[src] = []
+                    self._reverse_adj[src] = []
+                if dst not in self._forward_adj:
+                    self._forward_adj[dst] = []
+                    self._reverse_adj[dst] = []
+                # add the directed edge to both adjacency dicts
+                if dst not in self._forward_adj[src]:
+                    self._forward_adj[src].append(dst)
+                if src not in self._reverse_adj[dst]:
+                    self._reverse_adj[dst].append(src)
 
         if self._debug:
             print(f"\n{'='*60}")
@@ -627,21 +689,6 @@ class DirectedGraph:
                 pa = sorted(self._reverse_adj[node])
                 print(f"  {node:<10}  {str(ch):<30}  {pa}")
             print()
-
-    def _ensure(self, n):
-        """(private) register node n if it does not yet exist."""
-        if n not in self._forward_adj:
-            self._forward_adj[n] = []
-            self._reverse_adj[n] = []
-
-    def _link(self, src, dst):
-        """(private) add directed edge src->dst; keeps both adjacency dicts in sync."""
-        self._ensure(src)
-        self._ensure(dst)
-        if dst not in self._forward_adj[src]:
-            self._forward_adj[src].append(dst)
-        if src not in self._reverse_adj[dst]:
-            self._reverse_adj[dst].append(src)
 
     # ── simple accessors ──────────────────────────────────────────────
 
@@ -774,6 +821,57 @@ class DirectedGraph:
         result = dfs(src)
         if self._debug:
             print(f"\n[{self.__class__.__name__}.has_path]  '{src}' -> '{dst}': {result}")
+        return result
+
+    def has_path_with_maximum_length(self, src, dst, max_length):
+        """
+        RECURSIVE — DFS with backtracking and hop counter.
+        Return True if a directed path src->...->dst exists using at most
+        max_length edges.
+
+        Parameters
+        ----------
+        src        : str   starting node
+        dst        : str   destination node
+        max_length : int   maximum number of directed edges allowed
+
+        Example
+        -------
+        >>> g = DirectedGraph(edges=[('A','B'), ('B','C'), ('A','C')])
+        >>> g.has_path_with_maximum_length('A', 'C', 1)   # direct edge A->C exists
+        True
+        >>> g.has_path_with_maximum_length('A', 'C', 0)
+        False
+        >>> g = DirectedGraph(edges=[('A','B'), ('B','C'), ('C','D')])
+        >>> g.has_path_with_maximum_length('A', 'D', 2)   # shortest path is 3 hops
+        False
+        >>> g.has_path_with_maximum_length('A', 'D', 3)
+        True
+        """
+        if src == dst:
+            return True
+
+        # DFS with backtracking — on_path prevents revisiting nodes already
+        # on the current branch; remaining counts down the edge budget.
+        on_path = {src}
+
+        def dfs(u, remaining):
+            if remaining == 0:
+                return False
+            for v in self._forward_adj.get(u, []):
+                if v == dst:
+                    return True
+                if v not in on_path:
+                    on_path.add(v)
+                    if dfs(v, remaining - 1):
+                        return True
+                    on_path.remove(v)       # backtrack
+            return False
+
+        result = dfs(src, max_length)
+        if self._debug:
+            print(f"\n[{self.__class__.__name__}.has_path_with_maximum_length]"
+                  f"  '{src}' -> '{dst}' (max {max_length} hops): {result}")
         return result
 
     def has_cycle(self):
